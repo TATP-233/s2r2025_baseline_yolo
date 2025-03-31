@@ -597,7 +597,7 @@ if __name__ == "__main__":
         Start YOLO detection process
         """
         py_dir = os.popen('which python3').read().strip()
-        yolo_py_dir = "/workspace/s2r2025_baseline/yolo_detect.py"
+        yolo_py_dir = "/workspace/s2r2025_baseline_yolo/yolo_detect.py"
         os.system(f"{py_dir} {yolo_py_dir} --hide_info")
     
     # 创建并启动YOLO检测线程 | Create and start YOLO detection thread
