@@ -1,12 +1,21 @@
 本仓库为s2r2025比赛的baseline，使用传统机器人算法实现，目标检测使用yolo。
 
+## 更新说明
+
+### 4.11
+
+tag更新至v1.5：
+1. mujoco版本更新v3.2.7 --> v3.3.0 增强了数值稳定性
+2. 修正了gadgets的名称：wood -> plate
+3. 修正了桌面的碰撞系数，增强了数值稳定性
+
 ## 操作说明
 
 请更新server镜像至最新版本
 
 ```bash
-docker pull discoverse/s2r2025_server:v1.4
-(tag以最近版本为准，>=v1.4)
+docker pull discoverse/s2r2025_server:v1.5
+(tag以最近版本为准，>=v1.5)
 ```
 
 下载镜像
@@ -43,7 +52,7 @@ bash create_container_client.sh
 
 # 进入docker
 docker exec -it s2r2025_client_baseline_yolo bash
-cd /workspace/s2r2025_baseline
+cd /workspace/s2r2025_baseline_yolo
 python3 baselin_round1_seed99.py
 
 # 打开rviz2可视化yolo识别结果
