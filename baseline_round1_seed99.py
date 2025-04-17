@@ -144,7 +144,7 @@ class SimNode(MMK2TaskBase):
                 if reach_cnt < 0:
                     break
             # 计算线速度，与距离成正比 | Calculate linear velocity, proportional to distance
-            target_lin_vel = np.clip(tar_dist * np.sign(translation) * 0.75, -0.5, 0.5)           
+            target_lin_vel = np.clip(tar_dist * np.sign(translation) * 0.9, -0.65, 0.65)           
             self.base_move(target_lin_vel, 0.0)
             rate.sleep()
 
@@ -188,7 +188,7 @@ class SimNode(MMK2TaskBase):
                 if reach_cnt < 0:
                     break
             # 角速度与角度差成正比 | Angular velocity proportional to angle difference
-            self.base_move(0.0, np.clip(ang_diff, -0.5, 0.5) * 0.5)
+            self.base_move(0.0, np.clip(ang_diff, -0.8, 0.8) * 1.5)
             rate.sleep()
 
         # 停止旋转 | Stop rotating
@@ -328,13 +328,16 @@ class SimNode(MMK2TaskBase):
             if self.stm.trigger():
                 # 输出当前状态索引 | Output current state index
                 print(f"self.stm.state_idx = {self.stm.state_idx}")
+                
+                # if self.stm.state_idx > 1:
+                #     input(f"s{self.stm.state_idx} input to continue")
 
                 # 根据状态索引执行不同的动作 | Execute different actions based on state index
                 if self.stm.state_idx == 0:
                     # 状态0：移动到指定位置 | State 0: Move to specified position
                     self.base_move_done = False
                     self.target_posi_x = 0.55
-                    self.target_posi_y = 0.6
+                    self.target_posi_y = 0.52
                     self.target_yaw = 1.5708
                     # 创建移动线程 | Create movement thread
                     self.moveto_thead = threading.Thread(target=self.thread_moveto, args=(self.target_posi_x, self.target_posi_y, self.target_yaw))
@@ -342,9 +345,9 @@ class SimNode(MMK2TaskBase):
 
                 elif self.stm.state_idx == 1:
                     # 状态1：设置升降和头部位置以便观察 | State 1: Set slide and head position for observation
-                    self.tctr_slide[0] = 0.65  # 设置升降高度 | Set slide height
-                    self.tctr_head[0] = 0.  # 设置头部水平角度 | Set head horizontal angle
-                    self.tctr_head[1] = 0.45  # 设置头部垂直角度 | Set head vertical angle
+                    self.tctr_slide[0] = 0.7  # 设置升降高度 | Set slide height
+                    self.tctr_head[0] = 0.   # 设置头部水平角度 | Set head horizontal angle
+                    self.tctr_head[1] = 0.33  # 设置头部垂直角度 | Set head vertical angle
                     self.delay_cnt = int(2./self.delta_t)  # 延时2秒 | Delay 2 seconds
 
                 elif self.stm.state_idx == 2:
@@ -353,13 +356,13 @@ class SimNode(MMK2TaskBase):
                     self.tar_box_posi = self.update_target_pose("box", [0.3, 0.7])
 
                     # 设置左臂位置为盒子上方 | Set left arm position above the box
-                    tmp_lft_arm_target_pose = self.tar_box_posi + np.array([-0.14, 0.09, 0.05])
+                    tmp_lft_arm_target_pose = self.tar_box_posi + np.array([-0.15, 0.09, 0.06])
                     # 设置左臂末端姿态，使用ZYX欧拉角(0,0.8,π)表示旋转矩阵 | Set left arm end-effector pose using ZYX Euler angles (0,0.8,π) for rotation matrix
                     self.setArmEndTarget(tmp_lft_arm_target_pose, "carry", "l", np.array(self.sensor_lft_arm_qpos), Rotation.from_euler("zyx", [0., 0.8,  np.pi]).as_matrix())
                     self.tctr_lft_gripper[:] = 1.0  # 打开左爪 | Open left gripper
 
                     # 设置右臂位置为盒子上方 | Set right arm position above the box
-                    tmp_rgt_arm_target_pose = self.tar_box_posi + np.array([-0.14, -0.09, 0.05])
+                    tmp_rgt_arm_target_pose = self.tar_box_posi + np.array([-0.15, -0.09, 0.06])
                     # 设置右臂末端姿态，使用ZYX欧拉角(0,0.8,-π)表示旋转矩阵 | Set right arm end-effector pose using ZYX Euler angles (0,0.8,-π) for rotation matrix
                     self.setArmEndTarget(tmp_rgt_arm_target_pose, "carry", "r", np.array(self.sensor_rgt_arm_qpos), Rotation.from_euler("zyx", [0., 0.8, -np.pi]).as_matrix())
                     self.tctr_rgt_gripper[:] = 1.0  # 打开右爪 | Open right gripper
@@ -384,7 +387,7 @@ class SimNode(MMK2TaskBase):
 
                 elif self.stm.state_idx == 5:
                     # 状态5：调整升降高度 | State 5: Adjust slide height
-                    self.tctr_slide[0] = 0.62  # 稍微降低升降高度 | Slightly lower the slide height
+                    self.tctr_slide[0] = 0.67  # 稍微降低升降高度 | Slightly lower the slide height
                     self.tar_box_posi[2] += 0.03  # 盒子Z坐标上升，考虑到抓起后的高度变化 | Increase box Z coordinate, considering height change after grasping
                     
                 elif self.stm.state_idx == 6:
@@ -428,7 +431,7 @@ class SimNode(MMK2TaskBase):
                     # 状态10：移动到放置位置 | State 10: Move to placement position
                     self.base_move_done = False
                     self.target_posi_x = 0.  # 设置目标X坐标 | Set target X coordinate
-                    self.target_posi_y = 0.  # 设置目标Y坐标 | Set target Y coordinate
+                    self.target_posi_y = 0.05  # 设置目标Y坐标 | Set target Y coordinate
                     self.target_yaw = -1.5708  # 设置目标偏航角（-90度） | Set target yaw angle (-90 degrees)
                     # 创建移动线程 | Create movement thread
                     self.moveto_thead = threading.Thread(target=self.thread_moveto, args=(self.target_posi_x, self.target_posi_y, self.target_yaw))
@@ -568,7 +571,7 @@ class SimNode(MMK2TaskBase):
                 # 计算关节移动比率，用于平滑过渡 | Calculate joint movement ratio for smooth transition
                 dif = np.abs(self.action - self.target_control)
                 self.joint_move_ratio = dif / (np.max(dif) + 1e-6)
-                self.joint_move_ratio[2] *= 0.05  # 降低升降关节的移动速度 | Reduce movement speed of slide joint
+                self.joint_move_ratio[2] *= 0.15  # 降低升降关节的移动速度 | Reduce movement speed of slide joint
 
             else:
                 # 更新状态机状态 | Update state machine state

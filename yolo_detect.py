@@ -78,17 +78,17 @@ class YOLODetectorNode(Node):
         """
         # 订阅相机内参话题 | Subscribe to camera intrinsic parameters topic
         self.camera_info_sub = self.create_subscription(
-            CameraInfo, '/mmk2/head_camera/color/camera_info',
+            CameraInfo, '/head_camera/color/camera_info',
             self.camera_info_callback,10)
         
         # 订阅深度图像话题 | Subscribe to depth image topic
         self.depth_sub = self.create_subscription(
-            Image, '/mmk2/head_camera/aligned_depth_to_color/image_raw',
+            Image, '/head_camera/aligned_depth_to_color/image_raw',
             self.depth_callback,10)
         
         # 订阅RGB图像话题 | Subscribe to RGB image topic
         self.rgb_sub = self.create_subscription(
-            Image, '/mmk2/head_camera/color/image_raw',
+            Image, '/head_camera/color/image_raw',
             self.rgb_callback,10)
 
     def init_publisher(self):

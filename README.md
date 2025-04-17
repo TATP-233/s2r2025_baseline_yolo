@@ -9,6 +9,9 @@ tag更新至v1.5：
 2. 修正了gadgets的名称：wood -> plate
 3. 修正了桌面的碰撞系数，增强了数值稳定性
 
+tag更新至v1.6：
+1. to real
+
 ## 操作说明
 
 请更新server镜像至最新版本
@@ -53,7 +56,7 @@ bash create_container_client.sh
 # 进入docker
 docker exec -it s2r2025_client_baseline_yolo bash
 cd /workspace/s2r2025_baseline_yolo
-python3 baselin_round1_seed99.py
+python3 baseline_round1_seed99.py
 
 # 打开rviz2可视化yolo识别结果
 (terminal 2)
