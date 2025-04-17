@@ -54,6 +54,8 @@ class MMK2TaskBase(Node):
         self.task_info = None  # 任务信息 | Task information
         self.recv_odom_ = False  # 是否接收到里程计数据 | Whether odometry data is received
         self.recv_joint_states_ = False  # 是否接收到关节状态 | Whether joint states are received
+        self.init_jotnt_seq_ = False
+        self.joint_seq = np.zeros_like(self.obs["jq"], dtype=np.int32)
         
         # 观测状态 | Observation state
         self.obs = {
@@ -376,7 +378,7 @@ class MMK2TaskBase(Node):
         self.obs["base_orientation"] = [orientation_w, orientation_x, orientation_y, orientation_z]
         self.recv_odom_ = True
 
-    def joint_states_callback(self, msg):
+    def joint_states_callback(self, msg:JointState):
         """
         关节状态回调函数
         Joint states callback function
@@ -384,14 +386,35 @@ class MMK2TaskBase(Node):
         Args:
             msg: 关节状态消息 | Joint states message
         """
+        if not self.init_jotnt_seq_:
+            joint_names = [
+                "slide_joint", "head_yaw_joint", "head_pitch_joint",
+                "left_arm_joint1" , "left_arm_joint2" , "left_arm_joint3" , "left_arm_joint4" , "left_arm_joint5" , "left_arm_joint6" , "left_arm_eef_gripper_joint" ,
+                "right_arm_joint1", "right_arm_joint2", "right_arm_joint3", "right_arm_joint4", "right_arm_joint5", "right_arm_joint6", "right_arm_eef_gripper_joint",
+            ]
+
+            if len(msg.name) != len(joint_names):
+                print(f"Joint names length mismatch: {len(msg.name)} != {len(joint_names)}")
+                return 
+
+            msg_name = list(msg.name)
+            for i, n in enumerate(joint_names):
+                try:
+                    self.joint_seq[i] = msg_name.index(n)
+                except ValueError:
+                    print(f"Joint name {n} not found in message")
+                    return
+            print(f"Joint sequence: {self.joint_seq}")
+            self.init_jotnt_seq_ = True            
+
         self.obs["jq"][:] = msg.position
         # 分割关节角度到各个子系统 | Split joint angles to subsystems
-        self.sensor_slide_qpos = self.obs["jq"][:1]  # 升降关节角度 | Slide joint angle
-        self.sensor_head_qpos  = self.obs["jq"][1:3]  # 头部关节角度 | Head joint angles
-        self.sensor_lft_arm_qpos  = self.obs["jq"][3:9]  # 左臂关节角度 | Left arm joint angles
-        self.sensor_lft_gripper_qpos  = self.obs["jq"][9:10]  # 左爪关节角度 | Left gripper joint angle
-        self.sensor_rgt_arm_qpos  = self.obs["jq"][10:16]  # 右臂关节角度 | Right arm joint angles
-        self.sensor_rgt_gripper_qpos  = self.obs["jq"][16:17]  # 右爪关节角度 | Right gripper joint angle
+        self.sensor_slide_qpos = self.obs["jq"][self.joint_seq[:1]]  # 升降关节角度 | Slide joint angle
+        self.sensor_head_qpos  = self.obs["jq"][self.joint_seq[1:3]]  # 头部关节角度 | Head joint angles
+        self.sensor_lft_arm_qpos  = self.obs["jq"][self.joint_seq[3:9]]  # 左臂关节角度 | Left arm joint angles
+        self.sensor_lft_gripper_qpos  = self.obs["jq"][self.joint_seq[9:10]]  # 左爪关节角度 | Left gripper joint angle
+        self.sensor_rgt_arm_qpos  = self.obs["jq"][self.joint_seq[10:16]]  # 右臂关节角度 | Right arm joint angles
+        self.sensor_rgt_gripper_qpos  = self.obs["jq"][self.joint_seq[16:17]]  # 右爪关节角度 | Right gripper joint angle
         self.recv_joint_states_ = True
 
     def taskinfo_callback(self, msg):
