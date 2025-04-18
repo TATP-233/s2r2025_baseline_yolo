@@ -347,7 +347,7 @@ class SimNode(MMK2TaskBase):
                     # 状态1：设置升降和头部位置以便观察 | State 1: Set slide and head position for observation
                     self.tctr_slide[0] = 0.7  # 设置升降高度 | Set slide height
                     self.tctr_head[0] = 0.   # 设置头部水平角度 | Set head horizontal angle
-                    self.tctr_head[1] = 0.33  # 设置头部垂直角度 | Set head vertical angle
+                    self.tctr_head[1] = -0.33  # 设置头部垂直角度 | Set head vertical angle
                     self.delay_cnt = int(2./self.delta_t)  # 延时2秒 | Delay 2 seconds
 
                 elif self.stm.state_idx == 2:
@@ -424,7 +424,7 @@ class SimNode(MMK2TaskBase):
                     # 状态9：调整升降和头部位置 | State 9: Adjust slide and head positions
                     self.tctr_slide[0] = 0.  # 降低升降高度 | Lower slide height
                     self.tctr_head[0] = 0.  # 设置头部水平角度 | Set head horizontal angle
-                    self.tctr_head[1] = 0.45  # 设置头部垂直角度 | Set head vertical angle
+                    self.tctr_head[1] = -0.45  # 设置头部垂直角度 | Set head vertical angle
                     self.delay_cnt = int(2./self.delta_t)  # 延时2秒 | Delay 2 seconds
 
                 elif self.stm.state_idx == 10:
@@ -484,7 +484,7 @@ class SimNode(MMK2TaskBase):
                     # 状态17：抬高升降和头部以观察场景 | State 17: Raise slide and head to observe scene
                     self.tctr_slide[0] = 0.5  # 设置升降高度 | Set slide height
                     self.tctr_head[0] = 0.  # 设置头部水平角度 | Set head horizontal angle
-                    self.tctr_head[1] = 0.5  # 设置头部垂直角度 | Set head vertical angle
+                    self.tctr_head[1] = -0.5  # 设置头部垂直角度 | Set head vertical angle
                     self.delay_cnt = int(3./self.delta_t)  # 延时3秒 | Delay 3 seconds
 
                 elif self.stm.state_idx == 18:
@@ -497,7 +497,7 @@ class SimNode(MMK2TaskBase):
                     # 调整升降和头部位置 | Adjust slide and head positions
                     self.tctr_slide[0] = 0.  # 降低升降高度 | Lower slide height
                     self.tctr_head[0] = 0.  # 设置头部水平角度 | Set head horizontal angle
-                    self.tctr_head[1] = 0.55  # 设置头部垂直角度 | Set head vertical angle
+                    self.tctr_head[1] = -0.55  # 设置头部垂直角度 | Set head vertical angle
 
                 elif self.stm.state_idx == 19:
                     # 状态19：根据圆盘位置选择使用左臂或右臂抓取 | State 19: Choose left or right arm to grasp disk based on position
