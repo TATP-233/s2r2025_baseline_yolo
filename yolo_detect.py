@@ -6,7 +6,6 @@ LastEditTime: 2025-03-18 12:54:25
 '''
 import os
 import cv2
-import time
 import random
 import argparse
 import numpy as np
@@ -39,7 +38,8 @@ class YOLODetectorNode(Node):
         super().__init__('yolo_detector')
         self.bridge = CvBridge()  # 用于转换ROS图像和OpenCV图像 | For converting between ROS images and OpenCV images
         self.camera_intrinsic = None  # 相机内参 | Camera intrinsic parameters
-        self.latest_depth = None  # 最新的深度图像 | Latest depth image
+        self.camera_distCoeffs = None  # 相机畸变系数 | Camera distortion coefficients
+        self._depth_msg = None  # 最新的深度图像 | Latest depth image
         self.verbose = verbose  # 是否输出详细信息 | Whether to output detailed information
 
         # 初始化YOLO模型、ROS话题订阅和发布 | Initialize YOLO model, ROS topic subscriptions and publishers
@@ -60,7 +60,6 @@ class YOLODetectorNode(Node):
         try:
             # 加载YOLO模型 | Load YOLO model
             self.model = YOLO(model_path).to(self.device)
-            # print(f"load yolo model to device: {self.device}")
         except Exception as e:
             raise RuntimeError(f"failed to load yolo model: {str(e)}")
 
@@ -79,17 +78,17 @@ class YOLODetectorNode(Node):
         # 订阅相机内参话题 | Subscribe to camera intrinsic parameters topic
         self.camera_info_sub = self.create_subscription(
             CameraInfo, '/head_camera/color/camera_info',
-            self.camera_info_callback,10)
+            self.camera_info_callback, 10)
         
         # 订阅深度图像话题 | Subscribe to depth image topic
         self.depth_sub = self.create_subscription(
             Image, '/head_camera/aligned_depth_to_color/image_raw',
-            self.depth_callback,10)
+            self.depth_callback, 10)
         
         # 订阅RGB图像话题 | Subscribe to RGB image topic
         self.rgb_sub = self.create_subscription(
             Image, '/head_camera/color/image_raw',
-            self.rgb_callback,10)
+            self.rgb_callback, 10)
 
     def init_publisher(self):
         """
@@ -97,14 +96,12 @@ class YOLODetectorNode(Node):
         Initialize ROS topic publishers
         """
         # 发布检测结果话题 | Publish detection results topic
-        self.detection_pub = self.create_publisher(
-            Detection2DArray, '/yolo/detections', 10)
+        self.detection_pub = self.create_publisher(Detection2DArray, '/yolo/detections', 10)
 
         # 发布可视化结果图像话题 | Publish visualized result image topic
-        self.result_pub = self.create_publisher(
-            Image, '/yolo/result_image',10)
-            
-    def camera_info_callback(self, msg):
+        self.result_pub = self.create_publisher(Image, '/yolo/result_image', 10)
+
+    def camera_info_callback(self, msg:CameraInfo):
         """
         相机内参信息回调函数
         Camera intrinsic information callback function
@@ -112,10 +109,13 @@ class YOLODetectorNode(Node):
         Args:
             msg: 相机内参消息 | Camera intrinsic message
         """
+        # 提取相机畸变系数 | Extract camera distortion coefficients
+        if len(msg.d):
+            self.camera_distCoeffs = np.array(msg.d).flatten()
         # 提取相机内参矩阵 | Extract camera intrinsic matrix
         self.camera_intrinsic = np.array(msg.k).reshape(3,3)
-        
-    def depth_callback(self, msg):
+
+    def depth_callback(self, msg:Image):
         """
         深度图像回调函数
         Depth image callback function
@@ -124,9 +124,9 @@ class YOLODetectorNode(Node):
             msg: 深度图像消息 | Depth image message
         """
         # 将ROS深度图像转换为OpenCV格式 | Convert ROS depth image to OpenCV format
-        self.latest_depth = self.bridge.imgmsg_to_cv2(msg)
+        self._depth_msg = msg
 
-    def rgb_callback(self, msg):
+    def rgb_callback(self, msg:Image):
         """
         RGB图像回调函数
         RGB image callback function
@@ -135,19 +135,19 @@ class YOLODetectorNode(Node):
             msg: RGB图像消息 | RGB image message
         """
         # 检查是否已接收到相机内参和深度图像 | Check if camera intrinsic and depth image have been received
-        if self.camera_intrinsic is None or self.latest_depth is None:
+        if self.camera_intrinsic is None or self._depth_msg is None:
             return
         
-        time_start = time.perf_counter()
         # 将ROS RGB图像转换为OpenCV格式 | Convert ROS RGB image to OpenCV format
         rgb_image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
-        depth_image = self.latest_depth
+        depth_image = self.bridge.imgmsg_to_cv2(self._depth_msg)
         
         # 检测物体并生成可视化图像 | Detect objects and generate visualized image
         visualized_img, detected_objects = self.detect_objects(
             rgb_image, 
             depth_image,
-            self.camera_intrinsic
+            self.camera_intrinsic,
+            self.camera_distCoeffs
         )
         
         # print(f"detect {len(detected_objects)} targets")
@@ -157,7 +157,7 @@ class YOLODetectorNode(Node):
         self.publish_detections(detected_objects)
         self.result_pub.publish(self.bridge.cv2_to_imgmsg(visualized_img, 'bgr8'))
 
-    def detect_objects(self, rgb_image, img_depth, camera_intrinsic):        
+    def detect_objects(self, rgb_image, img_depth, camera_intrinsic, camera_distCoeffs):
         """
         使用YOLO模型检测物体，并将2D检测结果转换为3D位置
         Detect objects using YOLO model and convert 2D detection results to 3D positions
@@ -170,46 +170,53 @@ class YOLODetectorNode(Node):
         Returns:
             带有标注的图像和检测到的物体列表 | Annotated image and list of detected objects
         """
-        start_time = time.perf_counter()
         # 使用YOLO模型进行目标检测 | Use YOLO model for object detection
         results = self.model(rgb_image, verbose=self.verbose)
-        inference_time = (time.perf_counter() - start_time) * 1000
+
         # 后处理检测结果 | Post-process detection results
         image, detected_objects = self.postprocess(results, rgb_image)
-        # print(f"inference time: {inference_time:.2f}ms")
         
-        # 从相机内参中提取参数 | Extract parameters from camera intrinsics
-        fx = camera_intrinsic[0,0]  # x方向焦距 | Focal length in x direction
-        fy = camera_intrinsic[1,1]  # y方向焦距 | Focal length in y direction
-        cx = camera_intrinsic[0,2]  # x方向光心 | Principal point in x direction
-        cy = camera_intrinsic[1,2]  # y方向光心 | Principal point in y direction
-
         # 遍历检测到的每个物体 | For each detected object
         for obj in detected_objects:
-            center_x = obj['x']  # 物体在图像中的x坐标 | Object x coordinate in image
-            center_y = obj['y']  # 物体在图像中的y坐标 | Object y coordinate in image
-            depth_m = img_depth[center_y, center_x] / 1000.0  # 将深度从mm转换为m | Convert depth from mm to m
+            obj_pix_x = obj['x']  # 物体在图像中的x坐标 | Object x coordinate in image
+            obj_pix_y = obj['y']  # 物体在图像中的y坐标 | Object y coordinate in image
+            depth_m = img_depth[obj_pix_y, obj_pix_x] / 1000.0  # 将深度从mm转换为m | Convert depth from mm to m
+
             # 计算物体在相机坐标系中的3D位置 | Calculate object 3D position in camera coordinate system
-            # X->right（右），Y->down（下），Z->forward（前） | X->right, Y->down, Z->forward
-            Z = depth_m  # Z坐标等于深度 | Z coordinate equals depth
-            # 使用针孔相机模型进行反投影 | Use pinhole camera model for back-projection
-            X = (center_x - cx) * Z / fx  # 计算X坐标 | Calculate X coordinate
-            Y = (center_y - cy) * Z / fy  # 计算Y坐标 | Calculate Y coordinate
+            point_xyz = self.pixel2world(depth_m, obj_pix_x, obj_pix_y, camera_intrinsic, camera_distCoeffs)
             obj.update({
-                'X': round(X, 3),  # 相机坐标系中的X坐标 | X coordinate in camera frame
-                'Y': round(Y, 3),  # 相机坐标系中的Y坐标 | Y coordinate in camera frame
-                'Z': round(Z, 3)   # 相机坐标系中的Z坐标 | Z coordinate in camera frame
+                'X': round(point_xyz[0], 3),  # 相机坐标系中的X坐标 | X coordinate in camera frame
+                'Y': round(point_xyz[1], 3),  # 相机坐标系中的Y坐标 | Y coordinate in camera frame
+                'Z': round(point_xyz[2], 3)   # 相机坐标系中的Z坐标 | Z coordinate in camera frame
             })
             # 在图像上绘制物体位置信息 | Draw object position information on image
-            cv2.putText(image, 
-                        f"{obj['class']}: ({X:.2f},{Y:.2f},{Z:.2f})m",
-                        (center_x - 50, center_y + 20), 
+            cv2.putText(image, f"{obj['class']}: ({point_xyz[0]:.2f},{point_xyz[1]:.2f},{point_xyz[2]:.2f})m", 
+                        (obj_pix_x - 50, obj_pix_y + 20), 
                         cv2.FONT_HERSHEY_SIMPLEX, 
-                        0.6, 
-                        (0,255,0), 
-                        2)
+                        0.6, (0,255,0), 2)
 
         return image, detected_objects
+
+    def pixel2world(self, depth_in_meters, pix_x, pix_y, intrinsic, camera_distCoeffs=None):
+        """
+        camera_distCoeffs: Input vector of distortion coefficients 
+            shape (5, ) : (k1, k2, P1, P2, K3)
+            shape (8, ) : (k1, k2, P1, P2, K3, k4, k5, k6)
+        """
+        # 计算相机坐标系中的3D点 | Calculate 3D point in camera coordinate system
+        if camera_distCoeffs is None:
+            # 从相机内参中提取参数 | Extract parameters from camera intrinsics
+            fx = intrinsic[0,0]  # x方向焦距 | Focal length in x direction
+            fy = intrinsic[1,1]  # y方向焦距 | Focal length in y direction
+            cx = intrinsic[0,2]  # x方向光心 | Principal point in x direction
+            cy = intrinsic[1,2]  # y方向光心 | Principal point in y direction
+            x = (pix_x - cx) * depth_in_meters / fx
+            y = (pix_y - cy) * depth_in_meters / fy
+        else:
+            udpixel = cv2.undistortPoints(np.array([[pix_x, pix_y]], np.float32), intrinsic, camera_distCoeffs)
+            x = udpixel.flatten()[0]
+            y = udpixel.flatten()[1]
+        return np.array([x, y, 1.0]) * depth_in_meters
 
     def postprocess(self, results, orig_img):
         """
@@ -289,11 +296,7 @@ class YOLODetectorNode(Node):
             hypothesis.hypothesis.class_id = str(obj['class'])  # 类别ID | Class ID
             hypothesis.hypothesis.score = float(obj['confidence'])  # 置信度 | Confidence
             # 设置物体在相机坐标系中的位置 | Set object position in camera frame
-            hypothesis.pose.pose.position = Point(
-                x=obj['X'],
-                y=obj['Y'],
-                z=obj['Z']
-            )
+            hypothesis.pose.pose.position = Point(x=obj['X'], y=obj['Y'], z=obj['Z'])
 
             detection.results.append(hypothesis)
             
@@ -318,7 +321,7 @@ def main(verbose):
 
 if __name__ == '__main__':
     # 解析命令行参数 | Parse command line arguments
-    parser = argparse.ArgumentParser(description='Run tasks with specified parameters. \ne.g. python3 os_run.py --robot_name airbot_play --task_name kiwi_place --track_num 100 --nw 8')
+    parser = argparse.ArgumentParser(description='YOLO Object Detection Node')
     parser.add_argument('--hide_info', action='store_true', help='Hide info')
     args = parser.parse_args()
 

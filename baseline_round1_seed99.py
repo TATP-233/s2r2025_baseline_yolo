@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation
 import rclpy
 
 from task_base import MMK2TaskBase
-from discoverse.utils import get_body_tmat, step_func, SimpleStateMachine
+from discoverse.utils import step_func, SimpleStateMachine
 
 class SimNode(MMK2TaskBase):
     """
@@ -56,11 +56,6 @@ class SimNode(MMK2TaskBase):
         
         # 设置动作初始值 | Set initial action values
         self.action[:] = self.target_control[:]
-
-        # print("-" * 100)        
-        # print("mj_data : ", self.mmk2_fk.mj_data.qpos)
-        # print("self.tmat_cam_head =\n", self.tmat_cam_head)
-        # print("-" * 100)
                 
         # 创建控制循环的频率控制器 | Create rate controller for control loop
         rate = self.create_rate(int(1./self.delta_t))
