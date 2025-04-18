@@ -55,17 +55,17 @@ class MMK2TaskBase(Node):
         self.recv_odom_ = False  # 是否接收到里程计数据 | Whether odometry data is received
         self.recv_joint_states_ = False  # 是否接收到关节状态 | Whether joint states are received
         self.init_jotnt_seq_ = False
-        self.joint_seq = np.zeros_like(self.obs["jq"], dtype=np.int32)
         
         # 观测状态 | Observation state
         self.obs = {
             "time": None,  # 时间 | Time
-            "jq": [0., 0., 0.,
+            "jq": np.array([0., 0., 0.,
                    0., 0., 0., 0., 0., 0., 0., 
-                   0., 0., 0., 0., 0., 0., 0.],  # 关节角度 | Joint angles
+                   0., 0., 0., 0., 0., 0., 0.]),  # 关节角度 | Joint angles
             "base_position": [0., 0., 0.],  # 底盘位置 | Base position
             "base_orientation": [1., 0., 0., 0.],  # 底盘方向（四元数w,x,y,z） | Base orientation (quaternion w,x,y,z)
         }
+        self.joint_seq = np.zeros_like(self.obs["jq"], dtype=np.int32)
 
         self.init_subscription()  # 初始化订阅 | Initialize subscriptions
         self.init_publisher()  # 初始化发布器 | Initialize publishers
@@ -247,8 +247,8 @@ class MMK2TaskBase(Node):
         初始化所有ROS话题订阅
         Initialize all ROS topic subscriptions
         """
-        self.sub_odom = self.create_subscription(Odometry, '/mmk2/odom', self.odom_callback, 10)
-        self.sub_joint_states = self.create_subscription(JointState, '/mmk2/joint_states', self.joint_states_callback, 10)
+        self.sub_odom = self.create_subscription(Odometry, '/slamware_ros_sdk_server_node/odom', self.odom_callback, 10)
+        self.sub_joint_states = self.create_subscription(JointState, '/joint_states', self.joint_states_callback, 10)
         self.sub_taskinfo = self.create_subscription(String, '/s2r2025/taskinfo', self.taskinfo_callback, 10)
         self.subscription_gameinfo = self.create_subscription(String, '/s2r2025/gameinfo', self.gameinfo_callback, 10)
         self.sub_detect = self.create_subscription(Detection2DArray, '/yolo/detections', self._detection_callback, 10)
@@ -258,11 +258,11 @@ class MMK2TaskBase(Node):
         初始化所有ROS话题发布器
         Initialize all ROS topic publishers
         """
-        self.publisher_cmd_vel = self.create_publisher(Twist, '/mmk2/cmd_vel', 10)
-        self.publisher_head = self.create_publisher(Float64MultiArray, '/mmk2/head_forward_position_controller/commands', 10)
-        self.publisher_left_arm = self.create_publisher(Float64MultiArray, '/mmk2/left_arm_forward_position_controller/commands', 10)
-        self.publisher_right_arm = self.create_publisher(Float64MultiArray, '/mmk2/right_arm_forward_position_controller/commands', 10)
-        self.publisher_spine = self.create_publisher(Float64MultiArray, '/mmk2/spine_forward_position_controller/commands', 10)
+        self.publisher_cmd_vel = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.publisher_head = self.create_publisher(Float64MultiArray, '/head_forward_position_controller/commands', 10)
+        self.publisher_left_arm = self.create_publisher(Float64MultiArray, '/left_arm_forward_position_controller/commands', 10)
+        self.publisher_right_arm = self.create_publisher(Float64MultiArray, '/right_arm_forward_position_controller/commands', 10)
+        self.publisher_spine = self.create_publisher(Float64MultiArray, '/spine_forward_position_controller/commands', 10)
     
     def _detection_callback(self, msg):
         """
@@ -407,7 +407,7 @@ class MMK2TaskBase(Node):
             print(f"Joint sequence: {self.joint_seq}")
             self.init_jotnt_seq_ = True            
 
-        self.obs["jq"][:] = msg.position
+        self.obs["jq"] = np.array(msg.position)
         # 分割关节角度到各个子系统 | Split joint angles to subsystems
         self.sensor_slide_qpos = self.obs["jq"][self.joint_seq[:1]]  # 升降关节角度 | Slide joint angle
         self.sensor_head_qpos  = self.obs["jq"][self.joint_seq[1:3]]  # 头部关节角度 | Head joint angles

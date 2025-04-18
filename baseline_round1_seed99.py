@@ -616,16 +616,17 @@ if __name__ == "__main__":
     spin_thead = threading.Thread(target=lambda: rclpy.spin(mmk2_node))
     spin_thead.start()
 
-    # mmk2_node.stm.state_idx = 13
-    # mmk2_node.stm.new_state = True
-    # mmk2_node.base_move_done = True
-
     # 等待接收所有必要数据 | Wait for receiving all necessary data
+    gap_cnt = 0
     while rclpy.ok():
         if mmk2_node.recv_task_ and mmk2_node.recv_joint_states_ and mmk2_node.recv_odom_:
             print("all data received")
             break
         time.sleep(0.1)
+        # 每隔1s打印一次当前状态 | Print current state every 1 second
+        gap_cnt += 1
+        if gap_cnt % 20 == 0:
+            rclpy.logging.get_logger("mmk2_node").warning(f"recv_ task:{mmk2_node.recv_task_}, joints:{mmk2_node.recv_joint_states_}, odom:{mmk2_node.recv_odom_}")
 
     # 执行任务 | Execute task
     mmk2_node.play_once()

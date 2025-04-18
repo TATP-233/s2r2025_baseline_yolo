@@ -124,7 +124,7 @@ class YOLODetectorNode(Node):
             msg: 深度图像消息 | Depth image message
         """
         # 将ROS深度图像转换为OpenCV格式 | Convert ROS depth image to OpenCV format
-        self.latest_depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono16')
+        self.latest_depth = self.bridge.imgmsg_to_cv2(msg)
 
     def rgb_callback(self, msg):
         """
