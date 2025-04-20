@@ -507,13 +507,13 @@ class SimNode(MMK2TaskBase):
                     # 如果圆盘在左侧，使用左臂 | If disk is on the left side, use left arm
                     if self.tar_obj_posi[1] > 0.0:
                         # 设置左臂位置到圆盘上方 | Set left arm position above the disk
-                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.1])
+                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0.00, 0., 0.1])
                         # 设置左臂末端姿态，使用单位矩阵表示垂直向下抓取 | Set left arm end-effector pose, using identity matrix for vertical downward grasping
                         self.setArmEndTarget(tmp_lft_arm_target_pose, "pick", "l", np.array(self.sensor_lft_arm_qpos), np.eye(3))
                         self.tctr_lft_gripper[:] = 0.7  # 半开左爪 | Half-open left gripper
                     else:
                         # 设置右臂位置到圆盘上方 | Set right arm position above the disk
-                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.1])
+                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0.00, 0., 0.1])
                         # 设置右臂末端姿态，使用单位矩阵表示垂直向下抓取 | Set right arm end-effector pose, using identity matrix for vertical downward grasping
                         self.setArmEndTarget(tmp_rgt_arm_target_pose, "pick", "r", np.array(self.sensor_rgt_arm_qpos), np.eye(3))
                         self.tctr_rgt_gripper[:] = 0.7  # 半开右爪 | Half-open right gripper
@@ -523,11 +523,11 @@ class SimNode(MMK2TaskBase):
                     # 如果圆盘在左侧，使用左臂 | If disk is on the left side, use left arm
                     if self.tar_obj_posi[1] > 0.0:
                         # 左臂下降到圆盘位置 | Lower left arm to disk position
-                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.03])
+                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0.00, 0., 0.03])
                         self.setArmEndTarget(tmp_lft_arm_target_pose, "pick", "l", np.array(self.sensor_lft_arm_qpos), np.eye(3))
                     else:
                         # 右臂下降到圆盘位置 | Lower right arm to disk position
-                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.03])
+                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0.00, 0., 0.03])
                         self.setArmEndTarget(tmp_rgt_arm_target_pose, "pick", "r", np.array(self.sensor_rgt_arm_qpos), np.eye(3))
                     self.delay_cnt = int(3./self.delta_t)  # 延时 | Delay 
 
@@ -545,11 +545,11 @@ class SimNode(MMK2TaskBase):
                     # 如果圆盘在左侧，使用左臂 | If disk is on the left side, use left arm
                     if self.tar_obj_posi[1] > 0.0:
                         # 左臂上升 | Raise left arm
-                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.15])
+                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0.00, 0., 0.15])
                         self.setArmEndTarget(tmp_lft_arm_target_pose, "pick", "l", np.array(self.sensor_lft_arm_qpos), np.eye(3))
                     else:
                         # 右臂上升 | Raise right arm
-                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.15])
+                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0.00, 0., 0.15])
                         self.setArmEndTarget(tmp_rgt_arm_target_pose, "pick", "r", np.array(self.sensor_rgt_arm_qpos), np.eye(3))
 
                 elif self.stm.state_idx == 26:
