@@ -6,11 +6,9 @@ LastEditTime: 2025-03-18 12:54:25
 '''
 import os
 import cv2
-import random
+import torch
 import argparse
 import numpy as np
-import torch
-from ultralytics import YOLO
 
 import rclpy
 from rclpy.node import Node
@@ -19,15 +17,29 @@ from geometry_msgs.msg import Point
 from sensor_msgs.msg import Image, CameraInfo
 from vision_msgs.msg import Detection2DArray, Detection2D, BoundingBox2D, ObjectHypothesisWithPose
 
+USE_ULTRALYTICS = False
+
+if USE_ULTRALYTICS:
+    from ultralytics import YOLO
+else:
+    from models.experimental import attempt_load
+    from utils.datasets import letterbox
+    from utils.general import non_max_suppression, scale_coords
+
 # 为每个类别随机分配颜色，用于可视化 | Randomly assign colors for each class for visualization
-COLORS = {i: random.randint(0, 255) for i in range(10)}
+COLORS = [
+    (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0),
+    (0, 255, 255), (255, 0, 255), (128, 128, 128), (255, 128, 0),
+    (0, 128, 255), (128, 0, 255), (255, 0, 128), (0, 255, 128),
+    (128, 255, 0), (255, 128, 128), (128, 0, 128), (0, 0, 0)
+]
 
 class YOLODetectorNode(Node):
     """
     YOLO目标检测节点，负责检测图像中的物体并发布结果
     YOLO object detection node, responsible for detecting objects in images and publishing results
     """
-    def __init__(self, verbose):
+    def __init__(self, print_log=False, pub_res_img=False, verbose=False):
         """
         初始化YOLO检测器节点
         Initialize YOLO detector node
@@ -40,14 +52,29 @@ class YOLODetectorNode(Node):
         self.camera_intrinsic = None  # 相机内参 | Camera intrinsic parameters
         self.camera_distCoeffs = None  # 相机畸变系数 | Camera distortion coefficients
         self._depth_msg = None  # 最新的深度图像 | Latest depth image
-        self.verbose = verbose  # 是否输出详细信息 | Whether to output detailed information
+        self.print_log = print_log  # 是否输出详细信息 | Whether to output detailed information
+        self.pub_result_image = pub_res_img
+        self.verbose = verbose
+
+        if self.verbose:
+            self.window_name = "yolo_detect"
+            cv2.namedWindow(self.window_name, cv2.WINDOW_GUI_NORMAL)
+            cv2.resizeWindow(self.window_name, 640, 480)
+            cv2.setMouseCallback(self.window_name, self.mouseCallback)
+            self.split_line = 640
+            self.mouse_x = 0
+            self.mouse_y = 0
 
         # 初始化YOLO模型、ROS话题订阅和发布 | Initialize YOLO model, ROS topic subscriptions and publishers
-        self.init_model(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'prize_m.pt'))
+        if USE_ULTRALYTICS:
+            model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'checkpoints/prize_m.pt')
+        else:
+            model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'checkpoints/best.pt')
+        self.init_model(model_path, USE_ULTRALYTICS)
         self.init_subscription()
         self.init_publisher()
 
-    def init_model(self, model_path):
+    def init_model(self, model_path, use_ultralytics=True):
         """
         初始化YOLO模型
         Initialize YOLO model
@@ -57,16 +84,31 @@ class YOLODetectorNode(Node):
         """
         # 设置设备（GPU或CPU） | Set device (GPU or CPU)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        try:
-            # 加载YOLO模型 | Load YOLO model
-            self.model = YOLO(model_path).to(self.device)
-        except Exception as e:
-            raise RuntimeError(f"failed to load yolo model: {str(e)}")
+
+        if use_ultralytics:
+            from ultralytics import YOLO
+            try:
+                # 加载YOLO模型 | Load YOLO model
+                self.model = YOLO(model_path).to(self.device)
+            except Exception as e:
+                raise RuntimeError(f"failed to load yolo model: {str(e)}")
+        else:
+            self.model = attempt_load(model_path, map_location=self.device)  # load FP32 model
+            if self.device.type != 'cpu':
+                self.half_model = True
+                self.model.half()  # to FP16
+                img_size = 640
+                self.model(torch.zeros(1, 3, img_size, img_size).to(self.device).type_as(next(self.model.parameters())))  # run once
+            self.stride = int(self.model.stride.max())  # model stride
+
+            color_img = np.zeros((640, 640, 3), np.uint8)
+            s = np.stack([letterbox(color_img, img_size, stride=self.stride)[0].shape], 0)  # shapes
+            self.rect = np.unique(s, axis=0).shape[0] == 1  # rect inference if all shapes equal
 
         # 设置模型为评估模式 | Set model to evaluation mode
         self.model.eval()
         self.img_size = 640  # 图像大小 | Image size
-        self.conf_thresh = 0.7  # 置信度阈值 | Confidence threshold
+        self.conf_thresh = 0.75  # 置信度阈值 | Confidence threshold
         # 定义识别的物体类别 | Define object classes to be recognized
         self.class_names = ["box", "carton", "disk", "sheet", "airbot", "blue_circle", "-1"]
 
@@ -98,8 +140,9 @@ class YOLODetectorNode(Node):
         # 发布检测结果话题 | Publish detection results topic
         self.detection_pub = self.create_publisher(Detection2DArray, '/yolo/detections', 10)
 
-        # 发布可视化结果图像话题 | Publish visualized result image topic
-        self.result_pub = self.create_publisher(Image, '/yolo/result_image', 10)
+        if self.pub_result_image or self.verbose:
+            # 发布可视化结果图像话题 | Publish visualized result image topic
+            self.result_pub = self.create_publisher(Image, '/yolo/result_image', 10)
 
     def camera_info_callback(self, msg:CameraInfo):
         """
@@ -114,6 +157,14 @@ class YOLODetectorNode(Node):
             self.camera_distCoeffs = np.array(msg.d).flatten()
         # 提取相机内参矩阵 | Extract camera intrinsic matrix
         self.camera_intrinsic = np.array(msg.k).reshape(3,3)
+
+    def mouseCallback(self, event, x, y, flags, param):
+        _x, _y, width, height = cv2.getWindowImageRect(self.window_name)
+        if flags == cv2.EVENT_FLAG_LBUTTON:
+            self.split_line = min(max(x, 0), width)
+        if event == cv2.EVENT_MOUSEMOVE:
+            self.mouse_x = min(max(x, 0), width-1)
+            self.mouse_y = min(max(y, 0), height-1)
 
     def depth_callback(self, msg:Image):
         """
@@ -150,37 +201,80 @@ class YOLODetectorNode(Node):
             self.camera_distCoeffs
         )
         
-        # print(f"detect {len(detected_objects)} targets")
-        # print(f"detect time: { round((time.perf_counter() - time_start)*1000, 3) } ms")
-
         # 发布检测结果和可视化图像 | Publish detection results and visualized image
         self.publish_detections(detected_objects)
-        self.result_pub.publish(self.bridge.cv2_to_imgmsg(visualized_img, 'bgr8'))
 
-    def detect_objects(self, rgb_image, img_depth, camera_intrinsic, camera_distCoeffs):
+        if self.pub_result_image:
+            self.result_pub.publish(self.bridge.cv2_to_imgmsg(visualized_img, 'bgr8'))
+
+        if self.verbose:
+            # check 窗口是否还存在 | Check if window still exists
+            if cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) < 1:
+                print("Window closed, exiting...")
+                raise KeyboardInterrupt
+
+            # 在窗口中显示RGB图像 | Display RGB image in window
+            depth = depth_image[self.mouse_y, self.mouse_x] * 1e-3
+            point = self.pixel2world(depth, self.mouse_x, self.mouse_y, self.camera_intrinsic, self.camera_distCoeffs)
+            cv2.putText(visualized_img, f"({point[0]:4.2f},{point[1]:4.2f},{point[2]:4.2f})", (5, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+
+            # 在窗口中显示检测结果 | Display detection results in window
+            cv2.imshow(self.window_name, visualized_img)
+            key = cv2.waitKey(1)
+            if key == 27:
+                print("ESC key pressed, exiting...")
+                raise KeyboardInterrupt
+
+    def detect_objects(self, rgb_image, depth_image, camera_intrinsic, camera_distCoeffs):
         """
         使用YOLO模型检测物体，并将2D检测结果转换为3D位置
         Detect objects using YOLO model and convert 2D detection results to 3D positions
         
         Args:
             rgb_image: RGB图像 | RGB image
-            img_depth: 深度图像 | Depth image
+            img_depth: 深度图像 (毫米) | Depth image (mm)
             camera_intrinsic: 相机内参矩阵 | Camera intrinsic matrix
             
         Returns:
             带有标注的图像和检测到的物体列表 | Annotated image and list of detected objects
         """
         # 使用YOLO模型进行目标检测 | Use YOLO model for object detection
-        results = self.model(rgb_image, verbose=self.verbose)
+        if USE_ULTRALYTICS:
+            results = self.model(rgb_image, verbose=self.print_log)[0]
+        else:
+            im0 = rgb_image.copy()
+
+            img_size = 640
+            img = np.stack([letterbox(im0, img_size, auto=self.rect, stride=self.stride)[0]], 0)
+
+            img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB, to bsx3x416x416
+            img = np.ascontiguousarray(img)
+
+            img = torch.from_numpy(img).to(self.device)
+            img = img.half() if self.half_model else img.float()  # uint8 to fp16/32
+            img /= 255.0  # 0 - 255 to 0.0 - 1.0
+            if img.ndimension() == 3:
+                img = img.unsqueeze(0)
+
+            with torch.no_grad():
+                pred = self.model(img)[0]
+
+            results = non_max_suppression(pred, self.conf_thresh, 0.45)[0]
+            if len(results):
+                results[:, :4] = scale_coords(img.shape[2:], results[:, :4], im0.shape).round()
 
         # 后处理检测结果 | Post-process detection results
+        if self.verbose:
+            depth_img_color = cv2.applyColorMap(cv2.convertScaleAbs(np.clip(depth_image, 0.0, 3000.0), alpha=0.255/3.), cv2.COLORMAP_JET)
+            rgb_image[:, self.split_line:, :] = depth_img_color[:, self.split_line:, :]
+
         image, detected_objects = self.postprocess(results, rgb_image)
         
         # 遍历检测到的每个物体 | For each detected object
         for obj in detected_objects:
             obj_pix_x = obj['x']  # 物体在图像中的x坐标 | Object x coordinate in image
             obj_pix_y = obj['y']  # 物体在图像中的y坐标 | Object y coordinate in image
-            depth_m = img_depth[obj_pix_y, obj_pix_x] / 1000.0  # 将深度从mm转换为m | Convert depth from mm to m
+            depth_m = depth_image[obj_pix_y, obj_pix_x] * 1e-3  # 将深度从mm转换为m | Convert depth from mm to m
 
             # 计算物体在相机坐标系中的3D位置 | Calculate object 3D position in camera coordinate system
             point_xyz = self.pixel2world(depth_m, obj_pix_x, obj_pix_y, camera_intrinsic, camera_distCoeffs)
@@ -189,11 +283,14 @@ class YOLODetectorNode(Node):
                 'Y': round(point_xyz[1], 3),  # 相机坐标系中的Y坐标 | Y coordinate in camera frame
                 'Z': round(point_xyz[2], 3)   # 相机坐标系中的Z坐标 | Z coordinate in camera frame
             })
+
             # 在图像上绘制物体位置信息 | Draw object position information on image
-            cv2.putText(image, f"{obj['class']}: ({point_xyz[0]:.2f},{point_xyz[1]:.2f},{point_xyz[2]:.2f})m", 
-                        (obj_pix_x - 50, obj_pix_y + 20), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 
-                        0.6, (0,255,0), 2)
+            if self.pub_result_image or self.verbose:
+                color = COLORS[self.class_names.index(obj['class'])]
+                cv2.putText(image, f"{obj['class']}: ({point_xyz[0]:.2f},{point_xyz[1]:.2f},{point_xyz[2]:.2f})m", 
+                            (obj_pix_x - 50, obj_pix_y + 20), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 
+                            0.5, color, 1)
 
         return image, detected_objects
 
@@ -230,33 +327,49 @@ class YOLODetectorNode(Node):
         Returns:
             带有标注的图像和检测到的物体列表 | Annotated image and list of detected objects
         """
-        image = orig_img.copy()  # 复制原始图像以进行标注 | Copy original image for annotation
+
+        if self.pub_result_image or self.verbose:
+            image = orig_img.copy()  # 复制原始图像以进行标注 | Copy original image for annotation
+        else:
+            image = orig_img
         detected_objects = []  # 检测到的物体列表 | List of detected objects
         
         # 处理每个检测结果 | Process each detection result
-        for result in results:
-            boxes = result.boxes  # 获取边界框 | Get bounding boxes
-            for box in boxes:
-                # 跳过置信度低于阈值的检测 | Skip detections with confidence below threshold
-                if box.conf.item() < self.conf_thresh:
-                    continue
+        if USE_ULTRALYTICS:
+            det = results.boxes  # 获取边界框 | Get bounding boxes
+        else:
+            det = results
 
-                # 获取边界框坐标 | Get bounding box coordinates
-                x0, y0, x1, y1 = map(int, box.xyxy[0].cpu().numpy())
+        for box in det:
+            if USE_ULTRALYTICS:
                 conf = box.conf.item()  # 置信度 | Confidence
                 cls_id = int(box.cls.item())  # 类别ID | Class ID
-                
-                # 创建物体信息字典 | Create object information dictionary
-                obj_info = {
-                    'class': self.class_names[cls_id],  # 类别名称 | Class name
-                    'confidence': conf,  # 置信度 | Confidence
-                    'x': int((x0 + x1) / 2),  # 边界框中心x坐标 | Bounding box center x coordinate
-                    'y': int((y0 + y1) / 2),  # 边界框中心y坐标 | Bounding box center y coordinate
-                    'w': int(x1 - x0),  # 边界框宽度 | Bounding box width
-                    'h': int(y1 - y0)   # 边界框高度 | Bounding box height
-                }
-                detected_objects.append(obj_info)
-                # 在图像上绘制边界框 | Draw bounding box on image
+                # 获取边界框坐标 | Get bounding box coordinates
+                x0, y0, x1, y1 = map(int, box.xyxy[0].cpu().numpy())
+            else:
+                *xyxy, conf, cls = box
+                cls_id = int(cls)
+                x0, y0, x1, y1 = map(int, xyxy)
+
+            # 跳过置信度低于阈值的检测 | Skip detections with confidence below threshold
+            if conf < self.conf_thresh:
+                continue
+
+            if cls_id < 1:
+                continue
+            
+            # 创建物体信息字典 | Create object information dictionary
+            obj_info = {
+                'class': self.class_names[cls_id],  # 类别名称 | Class name
+                'confidence': conf,  # 置信度 | Confidence
+                'x': int((x0 + x1) / 2),  # 边界框中心x坐标 | Bounding box center x coordinate
+                'y': int((y0 + y1) / 2),  # 边界框中心y坐标 | Bounding box center y coordinate
+                'w': int(x1 - x0),  # 边界框宽度 | Bounding box width
+                'h': int(y1 - y0)   # 边界框高度 | Bounding box height
+            }
+            detected_objects.append(obj_info)
+            # 在图像上绘制边界框 | Draw bounding box on image
+            if self.pub_result_image or self.verbose:
                 color = COLORS[cls_id]
                 cv2.rectangle(image, (x0, y0), (x1, y1), color, 2)
                 
@@ -305,7 +418,7 @@ class YOLODetectorNode(Node):
         # 发布检测结果消息 | Publish detection results message
         self.detection_pub.publish(msg)
 
-def main(verbose):
+def main(args):
     """
     主函数，初始化ROS节点并运行
     Main function, initialize ROS node and run
@@ -314,16 +427,24 @@ def main(verbose):
         verbose: 是否输出详细信息 | Whether to output detailed information
     """
     rclpy.init()  # 初始化ROS | Initialize ROS
-    node = YOLODetectorNode(verbose)  # 创建节点 | Create node
-    rclpy.spin(node)  # 运行节点 | Run node
-    node.destroy_node()  # 销毁节点 | Destroy node
-    rclpy.shutdown()  # 关闭ROS | Shutdown ROS
+    node = YOLODetectorNode(print_log=args.print_log, pub_res_img=args.pub_res_img, verbose=args.verbose)  # 创建节点 | Create node
+
+    try:
+        rclpy.spin(node)  # 运行节点 | Run node
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if node.verbose:
+            cv2.destroyWindow(node.window_name)  # 销毁窗口 | Destroy window
+        node.destroy_node()  # 销毁节点 | Destroy node
+        rclpy.shutdown()  # 关闭ROS | Shutdown ROS
 
 if __name__ == '__main__':
     # 解析命令行参数 | Parse command line arguments
     parser = argparse.ArgumentParser(description='YOLO Object Detection Node')
-    parser.add_argument('--hide_info', action='store_true', help='Hide info')
+    parser.add_argument('--print-log', action='store_true', help='Hide info')
+    parser.add_argument('--verbose', action='store_true', help='verbose')
+    parser.add_argument('--pub-res-img', action='store_true', help='verbose')
     args = parser.parse_args()
 
-    verbose = not args.hide_info  # 是否输出详细信息 | Whether to output detailed information
-    main(verbose)  # 运行主函数 | Run main function
+    main(args)  # 运行主函数 | Run main function
