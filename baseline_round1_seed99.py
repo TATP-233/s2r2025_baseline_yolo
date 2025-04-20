@@ -141,7 +141,7 @@ class SimNode(MMK2TaskBase):
                 if reach_cnt < 0:
                     break
             # 计算线速度，与距离成正比 | Calculate linear velocity, proportional to distance
-            target_lin_vel = np.clip(tar_dist * np.sign(translation) * 0.9, -0.65, 0.65)           
+            target_lin_vel = np.clip(tar_dist * np.sign(translation) * 0.5, -0.4, 0.4)           
             self.base_move(target_lin_vel, 0.0)
             rate.sleep()
 
@@ -342,9 +342,9 @@ class SimNode(MMK2TaskBase):
 
                 elif self.stm.state_idx == 1:
                     # 状态1：设置升降和头部位置以便观察 | State 1: Set slide and head position for observation
-                    self.tctr_slide[0] = 0.7  # 设置升降高度 | Set slide height
+                    self.tctr_slide[0] = 0.65  # 设置升降高度 | Set slide height
                     self.tctr_head[0] = 0.   # 设置头部水平角度 | Set head horizontal angle
-                    self.tctr_head[1] = -0.33  # 设置头部垂直角度 | Set head vertical angle
+                    self.tctr_head[1] = -0.35  # 设置头部垂直角度 | Set head vertical angle
 
                 elif self.stm.state_idx == 2:
                     # 状态2：等待2秒 | State 2: Wait 2 seconds
@@ -356,26 +356,26 @@ class SimNode(MMK2TaskBase):
                     self.tar_box_posi = self.update_target_pose("airbot", [0.3, 0.7])
 
                     # 设置左臂位置为盒子上方 | Set left arm position above the box
-                    tmp_lft_arm_target_pose = self.tar_box_posi + np.array([-0.15, 0.09, 0.06])
+                    tmp_lft_arm_target_pose = self.tar_box_posi + np.array([-0.12, 0.09, 0.08])
                     # 设置左臂末端姿态，使用ZYX欧拉角(0,0.8,π)表示旋转矩阵 | Set left arm end-effector pose using ZYX Euler angles (0,0.8,π) for rotation matrix
-                    self.setArmEndTarget(tmp_lft_arm_target_pose, "carry", "l", np.array(self.sensor_lft_arm_qpos), Rotation.from_euler("zyx", [0., 0.8,  np.pi]).as_matrix())
+                    self.setArmEndTarget(tmp_lft_arm_target_pose, "carry", "l", np.array(self.sensor_lft_arm_qpos), Rotation.from_euler("zyx", [0., 1.,  np.pi]).as_matrix())
                     self.tctr_lft_gripper[:] = 1.0  # 打开左爪 | Open left gripper
 
                     # 设置右臂位置为盒子上方 | Set right arm position above the box
-                    tmp_rgt_arm_target_pose = self.tar_box_posi + np.array([-0.15, -0.09, 0.06])
+                    tmp_rgt_arm_target_pose = self.tar_box_posi + np.array([-0.12, -0.09, 0.08])
                     # 设置右臂末端姿态，使用ZYX欧拉角(0,0.8,-π)表示旋转矩阵 | Set right arm end-effector pose using ZYX Euler angles (0,0.8,-π) for rotation matrix
-                    self.setArmEndTarget(tmp_rgt_arm_target_pose, "carry", "r", np.array(self.sensor_rgt_arm_qpos), Rotation.from_euler("zyx", [0., 0.8, -np.pi]).as_matrix())
+                    self.setArmEndTarget(tmp_rgt_arm_target_pose, "carry", "r", np.array(self.sensor_rgt_arm_qpos), Rotation.from_euler("zyx", [0., 1., -np.pi]).as_matrix())
                     self.tctr_rgt_gripper[:] = 1.0  # 打开右爪 | Open right gripper
 
                 elif self.stm.state_idx == 4:
                     # 状态4：移动机械臂到盒子抓取位置 | State 4: Move arms to box grasping position
                     # 设置左臂接近盒子位置 | Set left arm closer to box
-                    tmp_lft_arm_target_pose = self.tar_box_posi + np.array([0.03, 0.09, 0.01])
-                    self.setArmEndTarget(tmp_lft_arm_target_pose, "carry", "l", np.array(self.sensor_lft_arm_qpos), Rotation.from_euler("zyx", [0., 0.8,  np.pi]).as_matrix())
+                    tmp_lft_arm_target_pose = self.tar_box_posi + np.array([0.03, 0.09, 0.025])
+                    self.setArmEndTarget(tmp_lft_arm_target_pose, "carry", "l", np.array(self.sensor_lft_arm_qpos), Rotation.from_euler("zyx", [0., 1.,  np.pi]).as_matrix())
 
                     # 设置右臂接近盒子位置 | Set right arm closer to box
-                    tmp_rgt_arm_target_pose = self.tar_box_posi + np.array([0.03, -0.09, 0.01])
-                    self.setArmEndTarget(tmp_rgt_arm_target_pose, "carry", "r", np.array(self.sensor_rgt_arm_qpos), Rotation.from_euler("zyx", [0., 0.8, -np.pi]).as_matrix())
+                    tmp_rgt_arm_target_pose = self.tar_box_posi + np.array([0.03, -0.09, 0.025])
+                    self.setArmEndTarget(tmp_rgt_arm_target_pose, "carry", "r", np.array(self.sensor_rgt_arm_qpos), Rotation.from_euler("zyx", [0., 1., -np.pi]).as_matrix())
 
                 elif self.stm.state_idx == 5:
                     # 状态5：夹紧盒子 | State 5: Grasp the box
@@ -394,11 +394,11 @@ class SimNode(MMK2TaskBase):
                     # 状态7：调整机械臂位置准备搬运 | State 7: Adjust arm positions for carrying
                     # 调整左臂位置 | Adjust left arm position
                     tmp_lft_arm_target_pose = self.tar_box_posi + np.array([-0.09, 0.09, 0.025])
-                    self.setArmEndTarget(tmp_lft_arm_target_pose, "carry", "l", np.array(self.sensor_lft_arm_qpos), Rotation.from_euler("zyx", [0., 0.8,  np.pi]).as_matrix())
+                    self.setArmEndTarget(tmp_lft_arm_target_pose, "carry", "l", np.array(self.sensor_lft_arm_qpos), Rotation.from_euler("zyx", [0., 1.,  np.pi]).as_matrix())
 
                     # 调整右臂位置 | Adjust right arm position
                     tmp_rgt_arm_target_pose = self.tar_box_posi + np.array([-0.09, -0.09, 0.025])
-                    self.setArmEndTarget(tmp_rgt_arm_target_pose, "carry", "r", np.array(self.sensor_rgt_arm_qpos), Rotation.from_euler("zyx", [0., 0.8, -np.pi]).as_matrix())
+                    self.setArmEndTarget(tmp_rgt_arm_target_pose, "carry", "r", np.array(self.sensor_rgt_arm_qpos), Rotation.from_euler("zyx", [0., 1., -np.pi]).as_matrix())
 
                 elif self.stm.state_idx == 8:
                     # 状态8：调整盒子位置到中间 | State 8: Adjust box position to center
@@ -406,11 +406,11 @@ class SimNode(MMK2TaskBase):
                     
                     # 调整左臂位置 | Adjust left arm position
                     tmp_lft_arm_target_pose = self.tar_box_posi + np.array([-0.14, 0.09, 0.025])
-                    self.setArmEndTarget(tmp_lft_arm_target_pose, "carry", "l", np.array(self.sensor_lft_arm_qpos), Rotation.from_euler("zyx", [0., 0.8,  np.pi]).as_matrix())
+                    self.setArmEndTarget(tmp_lft_arm_target_pose, "carry", "l", np.array(self.sensor_lft_arm_qpos), Rotation.from_euler("zyx", [0., 1.,  np.pi]).as_matrix())
 
                     # 调整右臂位置 | Adjust right arm position
                     tmp_rgt_arm_target_pose = self.tar_box_posi + np.array([-0.14, -0.09, 0.025])
-                    self.setArmEndTarget(tmp_rgt_arm_target_pose, "carry", "r", np.array(self.sensor_rgt_arm_qpos), Rotation.from_euler("zyx", [0., 0.8, -np.pi]).as_matrix())
+                    self.setArmEndTarget(tmp_rgt_arm_target_pose, "carry", "r", np.array(self.sensor_rgt_arm_qpos), Rotation.from_euler("zyx", [0., 1., -np.pi]).as_matrix())
 
                 elif self.stm.state_idx == 9:
                     # 状态9：移动到新位置 | State 9: Move to new position
@@ -507,28 +507,29 @@ class SimNode(MMK2TaskBase):
                     # 如果圆盘在左侧，使用左臂 | If disk is on the left side, use left arm
                     if self.tar_obj_posi[1] > 0.0:
                         # 设置左臂位置到圆盘上方 | Set left arm position above the disk
-                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0., 0., 0.1])
+                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.1])
                         # 设置左臂末端姿态，使用单位矩阵表示垂直向下抓取 | Set left arm end-effector pose, using identity matrix for vertical downward grasping
                         self.setArmEndTarget(tmp_lft_arm_target_pose, "pick", "l", np.array(self.sensor_lft_arm_qpos), np.eye(3))
-                        self.tctr_lft_gripper[:] = 0.5  # 半开左爪 | Half-open left gripper
+                        self.tctr_lft_gripper[:] = 0.7  # 半开左爪 | Half-open left gripper
                     else:
                         # 设置右臂位置到圆盘上方 | Set right arm position above the disk
-                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0., 0., 0.1])
+                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.1])
                         # 设置右臂末端姿态，使用单位矩阵表示垂直向下抓取 | Set right arm end-effector pose, using identity matrix for vertical downward grasping
                         self.setArmEndTarget(tmp_rgt_arm_target_pose, "pick", "r", np.array(self.sensor_rgt_arm_qpos), np.eye(3))
-                        self.tctr_rgt_gripper[:] = 0.5  # 半开右爪 | Half-open right gripper
+                        self.tctr_rgt_gripper[:] = 0.7  # 半开右爪 | Half-open right gripper
 
                 elif self.stm.state_idx == 23:
                     # 状态23：移动臂部到抓取位置 | State 23: Move arm to grasping position
                     # 如果圆盘在左侧，使用左臂 | If disk is on the left side, use left arm
                     if self.tar_obj_posi[1] > 0.0:
                         # 左臂下降到圆盘位置 | Lower left arm to disk position
-                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0., 0., 0.03])
+                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.03])
                         self.setArmEndTarget(tmp_lft_arm_target_pose, "pick", "l", np.array(self.sensor_lft_arm_qpos), np.eye(3))
                     else:
                         # 右臂下降到圆盘位置 | Lower right arm to disk position
-                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0., 0., 0.03])
+                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.03])
                         self.setArmEndTarget(tmp_rgt_arm_target_pose, "pick", "r", np.array(self.sensor_rgt_arm_qpos), np.eye(3))
+                    self.delay_cnt = int(3./self.delta_t)  # 延时 | Delay 
 
                 elif self.stm.state_idx == 24:
                     # 状态24：夹紧圆盘 | State 24: Grasp the disk
@@ -544,11 +545,11 @@ class SimNode(MMK2TaskBase):
                     # 如果圆盘在左侧，使用左臂 | If disk is on the left side, use left arm
                     if self.tar_obj_posi[1] > 0.0:
                         # 左臂上升 | Raise left arm
-                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0., 0., 0.15])
+                        tmp_lft_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.15])
                         self.setArmEndTarget(tmp_lft_arm_target_pose, "pick", "l", np.array(self.sensor_lft_arm_qpos), np.eye(3))
                     else:
                         # 右臂上升 | Raise right arm
-                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0., 0., 0.15])
+                        tmp_rgt_arm_target_pose = self.tar_obj_posi + np.array([0.015, 0., 0.15])
                         self.setArmEndTarget(tmp_rgt_arm_target_pose, "pick", "r", np.array(self.sensor_rgt_arm_qpos), np.eye(3))
 
                 elif self.stm.state_idx == 26:
@@ -598,6 +599,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=3, suppress=True, linewidth=500)
 
     def run_yolo():
+        return
         """
         启动YOLO检测进程
         Start YOLO detection process
@@ -622,14 +624,14 @@ if __name__ == "__main__":
     # 等待接收所有必要数据 | Wait for receiving all necessary data
     gap_cnt = 0
     while rclpy.ok():
-        if mmk2_node.recv_task_ and mmk2_node.recv_joint_states_ and mmk2_node.recv_odom_:
+        if mmk2_node.recv_joint_states_ and mmk2_node.recv_odom_:
             print("all data received")
             break
         time.sleep(0.1)
         # 每隔1s打印一次当前状态 | Print current state every 1 second
         gap_cnt += 1
         if gap_cnt % 20 == 0:
-            rclpy.logging.get_logger("mmk2_node").warning(f"recv_ task:{mmk2_node.recv_task_}, joints:{mmk2_node.recv_joint_states_}, odom:{mmk2_node.recv_odom_}")
+            rclpy.logging.get_logger("mmk2_node").warning(f"recv_ joints:{mmk2_node.recv_joint_states_}, odom:{mmk2_node.recv_odom_}")
 
     try:
         mmk2_node.init_state()

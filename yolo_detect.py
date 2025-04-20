@@ -108,7 +108,7 @@ class YOLODetectorNode(Node):
         # 设置模型为评估模式 | Set model to evaluation mode
         self.model.eval()
         self.img_size = 640  # 图像大小 | Image size
-        self.conf_thresh = 0.75  # 置信度阈值 | Confidence threshold
+        self.conf_thresh = 0.65  # 置信度阈值 | Confidence threshold
         # 定义识别的物体类别 | Define object classes to be recognized
         self.class_names = ["box", "carton", "disk", "sheet", "airbot", "blue_circle", "-1"]
 
@@ -153,10 +153,15 @@ class YOLODetectorNode(Node):
             msg: 相机内参消息 | Camera intrinsic message
         """
         # 提取相机畸变系数 | Extract camera distortion coefficients
-        if len(msg.d):
-            self.camera_distCoeffs = np.array(msg.d).flatten()
+        # if len(msg.d):
+        #     self.camera_distCoeffs = np.array(msg.d).flatten()
+        self.camera_distCoeffs = np.array([ 0.01781,  0.50432, -0.00077, -0.00304, -1.8273 ])
         # 提取相机内参矩阵 | Extract camera intrinsic matrix
-        self.camera_intrinsic = np.array(msg.k).reshape(3,3)
+        # self.camera_intrinsic = np.array(msg.k).reshape(3,3)
+        self.camera_intrinsic = np.array([
+            [601.30624,   0.     , 307.18915],
+            [  0.     , 601.19196, 234.84905],
+            [  0.     ,   0.     ,   1.     ]])
 
     def mouseCallback(self, event, x, y, flags, param):
         _x, _y, width, height = cv2.getWindowImageRect(self.window_name)
